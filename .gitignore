@@ -1,0 +1,46 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Data (don't commit large datasets)
+data/*.csv
+data/*.parquet
+*.db
+*.sqlite
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# Docker
+docker-compose.override.yml
