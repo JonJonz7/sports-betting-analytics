@@ -1,9 +1,6 @@
 """Tests for the Kelly Criterion bet sizer."""
 
-import pytest
-
 from src.engines.bet_sizer import (
-    BetSize,
     calculate_bet_size,
     drawdown_adjusted_size,
     kelly_fraction,
@@ -33,7 +30,7 @@ class TestKellyFraction:
     def test_edge_cases(self):
         assert kelly_fraction(0.0, 2.0) == 0.0
         assert kelly_fraction(1.0, 2.0) == 0.0  # p=1 is invalid
-        assert kelly_fraction(0.5, 1.0) == 0.0   # odds=1 is invalid
+        assert kelly_fraction(0.5, 1.0) == 0.0  # odds=1 is invalid
 
 
 class TestSimultaneousKelly:

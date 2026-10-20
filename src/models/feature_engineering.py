@@ -9,12 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-import numpy as np
-
 
 @dataclass
 class FeatureVector:
     """A complete feature vector for one game."""
+
     game_id: str
     features: dict[str, float]
     computed_at: datetime
@@ -98,16 +97,13 @@ def compute_game_features(
     features["away_pace"] = away_pace
     features["pace_matchup_delta"] = home_pace - away_pace
     league_pace = league_avgs.get("pace", 100)
-    features["pace_factor"] = ((home_pace + away_pace) / 2) / league_pace if league_pace > 0 else 1.0
+    features["pace_factor"] = (
+        ((home_pace + away_pace) / 2) / league_pace if league_pace > 0 else 1.0
+    )
 
     # --- Opponent-adjusted ---
-    league_off = league_avgs.get("off_rating", 110)
-    features["home_off_vs_opp_def"] = (
-        features["home_off_rating"] - features["away_def_rating"]
-    )
-    features["away_off_vs_opp_def"] = (
-        features["away_off_rating"] - features["home_def_rating"]
-    )
+    features["home_off_vs_opp_def"] = features["home_off_rating"] - features["away_def_rating"]
+    features["away_off_vs_opp_def"] = features["away_off_rating"] - features["home_def_rating"]
 
     # --- Injury impact ---
     if injury_impacts:
@@ -126,8 +122,14 @@ def compute_game_features(
         features["current_total"] = line_data.get("current_total", 0)
         features["total_movement"] = features["current_total"] - features["opening_total"]
     else:
-        for key in ["opening_spread", "current_spread", "spread_movement",
-                     "opening_total", "current_total", "total_movement"]:
+        for key in [
+            "opening_spread",
+            "current_spread",
+            "spread_movement",
+            "opening_total",
+            "current_total",
+            "total_movement",
+        ]:
             features[key] = 0
 
     return FeatureVector(

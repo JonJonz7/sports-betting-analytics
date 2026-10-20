@@ -22,27 +22,29 @@ from dataclasses import dataclass
 @dataclass
 class CLVResult:
     """CLV measurement for a single bet."""
+
     bet_odds_american: int
     closing_odds_american: int
-    bet_implied: float          # implied probability at bet time
-    closing_implied: float      # implied probability at close
-    clv_pct: float              # CLV as percentage
-    clv_cents: float            # CLV in cents (e.g., +3.2 cents on the dollar)
-    beat_close: bool            # did the bettor get better odds than close?
+    bet_implied: float  # implied probability at bet time
+    closing_implied: float  # implied probability at close
+    clv_pct: float  # CLV as percentage
+    clv_cents: float  # CLV in cents (e.g., +3.2 cents on the dollar)
+    beat_close: bool  # did the bettor get better odds than close?
 
 
 @dataclass
 class CLVSummary:
     """Aggregate CLV statistics over a sample of bets."""
+
     total_bets: int
     avg_clv_pct: float
     median_clv_pct: float
     std_clv_pct: float
     t_statistic: float
     p_value: float
-    significant: bool           # is CLV significantly > 0?
+    significant: bool  # is CLV significantly > 0?
     confidence_interval: tuple[float, float]  # 95% CI
-    beat_close_rate: float      # % of bets that beat the closing line
+    beat_close_rate: float  # % of bets that beat the closing line
     best_clv: float
     worst_clv: float
 
@@ -121,9 +123,17 @@ def summarize_clv(records: list[CLVResult]) -> CLVSummary:
     """
     if not records:
         return CLVSummary(
-            total_bets=0, avg_clv_pct=0, median_clv_pct=0, std_clv_pct=0,
-            t_statistic=0, p_value=1.0, significant=False,
-            confidence_interval=(0, 0), beat_close_rate=0, best_clv=0, worst_clv=0,
+            total_bets=0,
+            avg_clv_pct=0,
+            median_clv_pct=0,
+            std_clv_pct=0,
+            t_statistic=0,
+            p_value=1.0,
+            significant=False,
+            confidence_interval=(0, 0),
+            beat_close_rate=0,
+            best_clv=0,
+            worst_clv=0,
         )
 
     values = [r.clv_pct for r in records]
@@ -132,7 +142,9 @@ def summarize_clv(records: list[CLVResult]) -> CLVSummary:
     # Descriptive stats
     mean_clv = sum(values) / n
     sorted_vals = sorted(values)
-    median_clv = sorted_vals[n // 2] if n % 2 else (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
+    median_clv = (
+        sorted_vals[n // 2] if n % 2 else (sorted_vals[n // 2 - 1] + sorted_vals[n // 2]) / 2
+    )
 
     # Standard deviation
     variance = sum((v - mean_clv) ** 2 for v in values) / max(n - 1, 1)
@@ -184,15 +196,17 @@ def rolling_clv(
     """
     results = []
     for i in range(window, len(records) + 1):
-        window_records = records[i - window:i]
+        window_records = records[i - window : i]
         summary = summarize_clv(window_records)
-        results.append({
-            "window_end": i,
-            "avg_clv": summary.avg_clv_pct,
-            "t_stat": summary.t_statistic,
-            "significant": summary.significant,
-            "beat_close_rate": summary.beat_close_rate,
-        })
+        results.append(
+            {
+                "window_end": i,
+                "avg_clv": summary.avg_clv_pct,
+                "t_stat": summary.t_statistic,
+                "significant": summary.significant,
+                "beat_close_rate": summary.beat_close_rate,
+            }
+        )
     return results
 
 
@@ -201,9 +215,16 @@ def _normal_sf(z: float) -> float:
     # Abramowitz and Stegun approximation 7.1.26
     t = 1.0 / (1.0 + 0.2316419 * abs(z))
     d = 0.3989422804014327  # 1/sqrt(2*pi)
-    p = d * math.exp(-z * z / 2.0) * (
-        t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 +
-        t * (-1.821255978 + t * 1.330274429))))
+    p = (
+        d
+        * math.exp(-z * z / 2.0)
+        * (
+            t
+            * (
+                0.319381530
+                + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429)))
+            )
+        )
     )
     return p if z > 0 else 1.0 - p
 

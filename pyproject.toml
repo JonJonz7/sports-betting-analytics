@@ -9,52 +9,44 @@ description = "Quantitative sports betting analytics engine"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = [
-    # Core
-    "numpy>=1.26",
-    "pandas>=2.1",
+    # Data pipeline
+    "numpy>=1.26,<2",
+    "pandas>=2.2,<3",
+    "pyarrow>=17",
+    "duckdb>=1.1,<2",
+    "requests>=2.32",
+    # Models
     "scipy>=1.11",
-
-    # ML
-    "scikit-learn>=1.3",
-    "xgboost>=2.0",
-
-    # API
-    "fastapi>=0.104",
-    "uvicorn[standard]>=0.24",
-    "httpx>=0.25",
-
-    # Database
-    "psycopg2-binary>=2.9",
-    "sqlalchemy>=2.0",
-    "redis>=5.0",
-
-    # AI
-    "anthropic>=0.39",
-
-    # Dashboard
-    "streamlit>=1.28",
-    "plotly>=5.18",
-
-    # Background jobs
-    "celery[redis]>=5.3",
-
-    # Config
-    "pydantic>=2.5",
-    "pydantic-settings>=2.1",
+    "scikit-learn>=1.5",
+    # Serving
+    "fastapi>=0.115",
+    "httpx>=0.27",
+    "uvicorn>=0.32",
+    "streamlit>=1.39",
+    "plotly>=5.24",
+    "pydantic>=2.9",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4",
-    "pytest-asyncio>=0.21",
-    "pytest-cov>=4.1",
-    "mypy>=1.7",
-    "ruff>=0.1",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
 ]
+# Modules for live operation that the batch pipeline doesn't use (see docs/ROADMAP.md)
+live = [
+    "anthropic>=0.39",
+    "psycopg2-binary>=2.9",
+    "sqlalchemy>=2.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 target-version = "py311"

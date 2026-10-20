@@ -1,3 +1,5 @@
+# Target design for LIVE odds capture (TimescaleDB + Redis). Not used by the batch
+# pipeline (`make run` uses Parquet + DuckDB). See ARCHITECTURE.md, "Live system (designed)".
 version: "3.9"
 
 services:

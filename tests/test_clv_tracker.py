@@ -1,9 +1,6 @@
 """Tests for the Closing Line Value tracker."""
 
-import pytest
-
 from src.engines.clv_tracker import (
-    CLVResult,
     american_to_implied,
     calculate_clv,
     rolling_clv,
@@ -85,7 +82,10 @@ class TestSummarizeCLV:
         # Small sample should not be significant even if all positive
         records = [calculate_clv(-110, -120) for _ in range(5)]
         summary = summarize_clv(records)
-        # With only 5 bets, hard to reach significance
+        # Identical bets have zero spread, so even 5 can look "certain"; the
+        # summary must still refuse to call 5 bets significant.
+        assert summary.total_bets == 5
+        assert not summary.significant
 
     def test_confidence_interval(self):
         records = [calculate_clv(-110, -115) for _ in range(100)]

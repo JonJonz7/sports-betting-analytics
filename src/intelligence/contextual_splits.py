@@ -17,15 +17,16 @@ from dataclasses import dataclass
 @dataclass
 class SplitResult:
     """A single contextual split comparison."""
-    entity_type: str            # 'team' or 'player'
+
+    entity_type: str  # 'team' or 'player'
     entity_name: str
-    split_type: str             # 'home_away', 'rest_days', 'division', etc.
-    baseline_value: float       # performance in baseline condition
-    split_value: float          # performance in split condition
-    delta: float                # split_value - baseline_value
-    delta_pct: float            # delta as percentage of baseline
+    split_type: str  # 'home_away', 'rest_days', 'division', etc.
+    baseline_value: float  # performance in baseline condition
+    split_value: float  # performance in split condition
+    delta: float  # split_value - baseline_value
+    delta_pct: float  # delta as percentage of baseline
     sample_size: int
-    significant: bool           # is the split statistically meaningful?
+    significant: bool  # is the split statistically meaningful?
 
 
 # SQL queries for each split type
@@ -61,7 +62,6 @@ SPLIT_QUERIES: dict[str, str] = {
         GROUP BY venue
         ORDER BY venue;
     """,
-
     "rest_days": """
         -- Performance by rest days (0 = back-to-back)
         WITH team_games AS (
@@ -97,7 +97,6 @@ SPLIT_QUERIES: dict[str, str] = {
         GROUP BY rest_bucket
         ORDER BY rest_bucket;
     """,
-
     "division": """
         -- Performance: divisional vs non-divisional games
         WITH team_games AS (
@@ -130,7 +129,6 @@ SPLIT_QUERIES: dict[str, str] = {
         FROM team_games
         GROUP BY game_type;
     """,
-
     "player_home_away": """
         -- Player stats: home vs away
         SELECT
@@ -147,7 +145,6 @@ SPLIT_QUERIES: dict[str, str] = {
           AND g.scheduled_at >= %(season_start)s
         GROUP BY venue;
     """,
-
     "referee_tendencies": """
         -- Referee crew: average total and foul rate
         SELECT
@@ -277,7 +274,7 @@ def calculate_split_impact(
 
     # Simple significance check: delta must be > 1 standard error
     # Rough approximation: SE ~ baseline * 0.1 / sqrt(n)
-    se_approx = baseline_stat * 0.1 / (sample_size ** 0.5)
+    se_approx = baseline_stat * 0.1 / (sample_size**0.5)
     significant = abs(delta) > 2 * se_approx and sample_size >= 20
 
     return SplitResult(

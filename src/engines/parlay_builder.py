@@ -19,21 +19,23 @@ from dataclasses import dataclass
 @dataclass
 class CorrelatedParlay:
     """A parlay with identified positive correlation between legs."""
+
     legs: list[ParlayLeg]
-    correlation: float              # Pearson r between outcomes
-    true_joint_prob: float          # actual probability accounting for correlation
-    independent_joint_prob: float   # probability if legs were independent
-    book_implied_prob: float        # sportsbook's implied probability (via parlay odds)
-    edge_pct: float                 # true_prob / book_implied - 1
-    parlay_odds_american: int       # combined American odds
+    correlation: float  # Pearson r between outcomes
+    true_joint_prob: float  # actual probability accounting for correlation
+    independent_joint_prob: float  # probability if legs were independent
+    book_implied_prob: float  # sportsbook's implied probability (via parlay odds)
+    edge_pct: float  # true_prob / book_implied - 1
+    parlay_odds_american: int  # combined American odds
 
 
 @dataclass
 class ParlayLeg:
     """A single leg of a parlay."""
+
     game_id: str
-    market_type: str        # 'total', 'moneyline', 'player_prop'
-    selection: str           # 'over', 'home', etc.
+    market_type: str  # 'total', 'moneyline', 'player_prop'
+    selection: str  # 'over', 'home', etc.
     odds_american: int
     model_prob: float
     player_id: str | None = None
@@ -136,9 +138,7 @@ def calculate_joint_probability(
     0.386
     """
     independent = prob_a * prob_b
-    adjustment = correlation * math.sqrt(
-        prob_a * (1 - prob_a) * prob_b * (1 - prob_b)
-    )
+    adjustment = correlation * math.sqrt(prob_a * (1 - prob_a) * prob_b * (1 - prob_b))
     joint = independent + adjustment
 
     # Clamp to valid probability range
@@ -188,7 +188,7 @@ def find_correlated_parlays(
     parlays: list[CorrelatedParlay] = []
 
     for i, leg_a in enumerate(available_legs):
-        for leg_b in available_legs[i + 1:]:
+        for leg_b in available_legs[i + 1 :]:
             # Only pair legs from the same game
             if leg_a.game_id != leg_b.game_id:
                 continue
@@ -218,15 +218,17 @@ def find_correlated_parlays(
                 edge = 0.0
 
             if edge >= min_edge:
-                parlays.append(CorrelatedParlay(
-                    legs=[leg_a, leg_b],
-                    correlation=r,
-                    true_joint_prob=round(true_joint, 4),
-                    independent_joint_prob=round(independent_joint, 4),
-                    book_implied_prob=round(book_implied, 4),
-                    edge_pct=round(edge, 4),
-                    parlay_odds_american=parlay_american,
-                ))
+                parlays.append(
+                    CorrelatedParlay(
+                        legs=[leg_a, leg_b],
+                        correlation=r,
+                        true_joint_prob=round(true_joint, 4),
+                        independent_joint_prob=round(independent_joint, 4),
+                        book_implied_prob=round(book_implied, 4),
+                        edge_pct=round(edge, 4),
+                        parlay_odds_american=parlay_american,
+                    )
+                )
 
     parlays.sort(key=lambda p: p.edge_pct, reverse=True)
     return parlays
@@ -242,8 +244,9 @@ def _lookup_correlation(
     b_type = _normalize_leg_type(leg_b)
 
     for entry in correlations:
-        if (entry["leg_a"] == a_type and entry["leg_b"] == b_type) or \
-           (entry["leg_a"] == b_type and entry["leg_b"] == a_type):
+        if (entry["leg_a"] == a_type and entry["leg_b"] == b_type) or (
+            entry["leg_a"] == b_type and entry["leg_b"] == a_type
+        ):
             return entry["r"]
 
     return None

@@ -18,6 +18,7 @@ from enum import Enum
 
 class VigRemovalMethod(Enum):
     """Methods for removing sportsbook vig to get fair probabilities."""
+
     ADDITIVE = "additive"
     MULTIPLICATIVE = "multiplicative"
     SHIN = "shin"
@@ -27,17 +28,18 @@ class VigRemovalMethod(Enum):
 @dataclass
 class EVOpportunity:
     """A detected +EV betting opportunity."""
+
     game_id: str
-    market_type: str           # 'moneyline', 'spread', 'total', 'player_prop'
-    selection: str             # 'home', 'away', 'over', 'under'
+    market_type: str  # 'moneyline', 'spread', 'total', 'player_prop'
+    selection: str  # 'home', 'away', 'over', 'under'
     sportsbook: str
-    model_prob: float          # model's estimated probability (0-1)
-    market_implied: float      # sportsbook's implied probability after vig removal
-    ev_pct: float              # expected value as percentage
-    edge_confidence: float     # composite confidence score (0-1)
-    odds_american: int         # American odds at detection
-    kelly_full: float          # full Kelly fraction
-    kelly_quarter: float       # quarter Kelly fraction
+    model_prob: float  # model's estimated probability (0-1)
+    market_implied: float  # sportsbook's implied probability after vig removal
+    ev_pct: float  # expected value as percentage
+    edge_confidence: float  # composite confidence score (0-1)
+    odds_american: int  # American odds at detection
+    kelly_full: float  # full Kelly fraction
+    kelly_quarter: float  # quarter Kelly fraction
 
 
 def american_to_decimal(american: int) -> float:
@@ -111,7 +113,7 @@ def remove_vig_multiplicative(
     if overround == 0:
         return implied_probs
     k = 1.0 / overround
-    fair = [p ** k for p in implied_probs]
+    fair = [p**k for p in implied_probs]
     # Renormalize to handle floating point
     total = sum(fair)
     return [p / total for p in fair]
@@ -129,7 +131,6 @@ def remove_vig_shin(
     Reference: Shin, H.S. (1993). "Measuring the Incidence of Insider Trading
     in a Market for State-Contingent Claims."
     """
-    n = len(implied_probs)
     overround = sum(implied_probs)
     if overround <= 1.0:
         return implied_probs
@@ -256,15 +257,24 @@ def scan_for_ev(
     opportunities: list[EVOpportunity] = []
 
     for book_name, book_odds in market_odds.items():
-        # Group odds by market for vig removal
-        # For each outcome, calculate EV against model
+        # De-vig each market (all outcomes of one market type at one book) together:
+        # the fair probabilities of a market's outcomes must sum to 1.
+        groups: dict[str, list[str]] = {}
+        for key in book_odds:
+            groups.setdefault(_infer_market_type(key), []).append(key)
+        fair_prob: dict[str, float] = {}
+        for keys in groups.values():
+            implied = [decimal_to_implied(american_to_decimal(book_odds[k])) for k in keys]
+            fair = remove_vig(implied) if len(keys) > 1 else implied
+            fair_prob.update(zip(keys, fair))
+
         for outcome_key, odds_american in book_odds.items():
             if outcome_key not in model_predictions:
                 continue
 
             model_prob = model_predictions[outcome_key]
             decimal_odds = american_to_decimal(odds_american)
-            market_implied = decimal_to_implied(decimal_odds)
+            market_implied = fair_prob[outcome_key]
 
             ev = calculate_ev(model_prob, decimal_odds)
 

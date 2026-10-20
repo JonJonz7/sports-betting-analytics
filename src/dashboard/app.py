@@ -1,65 +1,111 @@
-"""Streamlit dashboard for EdgeIQ Sports Betting Analytics.
+"""
+EdgeIQ dashboard (Streamlit, read-only).
 
-Replaces PowerBI with a free, Python-native, deployable dashboard.
-Connects to the FastAPI backend for data.
+    streamlit run src/dashboard/app.py
 """
 
 from __future__ import annotations
 
+import duckdb
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 
-def main():
-    """Entry point for the Streamlit dashboard."""
-    import streamlit as st
+from src.config import WAREHOUSE_PATH
 
-    st.set_page_config(
-        page_title="EdgeIQ Analytics",
-        page_icon="📊",
-        layout="wide",
+st.set_page_config(page_title="EdgeIQ", layout="wide")
+
+
+@st.cache_data(ttl=300)
+def q(sql: str) -> pd.DataFrame:
+    if not WAREHOUSE_PATH.exists():
+        return pd.DataFrame()
+    con = duckdb.connect(str(WAREHOUSE_PATH), read_only=True)
+    try:
+        return con.execute(sql).fetchdf()
+    except duckdb.Error:
+        return pd.DataFrame()
+    finally:
+        con.close()
+
+
+st.title("EdgeIQ: an NFL model vs the betting market")
+scores = q("select * from marts.model_vs_market order by season")
+if scores.empty:
+    st.warning("No warehouse yet. Run `make demo` (sample) or `make run` (real NFL data).")
+    st.stop()
+
+overall = scores[scores["season"] == "ALL"].iloc[0]
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Games scored", f"{int(overall['games']):,}")
+c2.metric("Model accuracy", f"{overall['model_accuracy']:.1%}")
+c3.metric("Market accuracy", f"{overall['market_accuracy']:.1%}")
+c4.metric("Brier: model / market", f"{overall['model_brier']:.4f} / {overall['market_brier']:.4f}")
+
+t1, t2, t3, t4 = st.tabs(["Model vs market", "Calibration", "Backtest", "Game lookup"])
+
+with t1:
+    per = scores[scores["season"] != "ALL"].melt(
+        id_vars="season",
+        value_vars=["model_log_loss", "elo_log_loss", "market_log_loss"],
+        var_name="source",
+        value_name="log_loss",
     )
+    st.plotly_chart(
+        px.line(
+            per,
+            x="season",
+            y="log_loss",
+            color="source",
+            markers=True,
+            title="Log loss by season (lower is better)",
+        ),
+        use_container_width=True,
+    )
+    st.dataframe(scores, hide_index=True, use_container_width=True)
 
-    st.title("EdgeIQ -- Sports Betting Analytics")
+with t2:
+    cal = q("""
+        select round(floor(home_novig * 20) / 20, 2) as bucket, avg(home_novig) as predicted,
+               avg(home_win) as actual, count(*) as games
+        from staging.stg_games where is_played and home_win is not null and home_novig is not null
+        group by 1 having count(*) >= 20 order by 1""")
+    fig = go.Figure()
+    fig.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="perfect", line={"dash": "dash"})
+    fig.add_scatter(
+        x=cal["predicted"], y=cal["actual"], mode="markers+lines", name="market", text=cal["games"]
+    )
+    fig.update_layout(
+        title="Market calibration: predicted vs actual home win rate",
+        xaxis_title="no-vig market probability",
+        yaxis_title="actual win rate",
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-    tab_ev, tab_clv, tab_parlays, tab_bankroll, tab_model = st.tabs([
-        "+EV Opportunities",
-        "CLV Tracker",
-        "Correlated Parlays",
-        "Bankroll & P/L",
-        "Model Performance",
-    ])
+with t3:
+    st.dataframe(
+        q("select * from marts.backtest_summary"), hide_index=True, use_container_width=True
+    )
+    bets = q("select game_date, bankroll, edge, won from marts.backtest_bets order by game_date")
+    if not bets.empty:
+        st.plotly_chart(
+            px.line(
+                bets,
+                x="game_date",
+                y="bankroll",
+                title="Bankroll, quarter-Kelly on model edges (starts at $10,000)",
+            ),
+            use_container_width=True,
+        )
+        st.caption(
+            "Bets are placed at closing odds, so closing line value is zero by construction."
+        )
 
-    with tab_ev:
-        st.header("+EV Discrepancy Engine")
-        st.info("Displays real-time +EV opportunities from the ev_engine.")
-        # TODO: fetch from /api/opportunities and display as sortable table
-        st.dataframe({"status": ["Connect to API"]})
-
-    with tab_clv:
-        st.header("Closing Line Value Tracker")
-        st.info("Rolling CLV with significance testing.")
-        # TODO: fetch from /api/clv/summary and display charts
-        st.metric("Avg CLV (90d)", "--", help="Average CLV over last 90 days")
-
-    with tab_parlays:
-        st.header("Correlated Parlay Builder")
-        st.info("Parlays with identified positive correlation between legs.")
-        # TODO: fetch from /api/parlays
-        st.dataframe({"status": ["Connect to API"]})
-
-    with tab_bankroll:
-        st.header("Bankroll & P/L")
-        st.info("Cumulative P&L, drawdown chart, per-sport breakdown.")
-        # TODO: fetch from /api/bankroll
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Bankroll", "--")
-        col2.metric("Net P/L", "--")
-        col3.metric("ROI", "--")
-
-    with tab_model:
-        st.header("Model Performance")
-        st.info("Accuracy, Brier score, and calibration by sport and market.")
-        # TODO: fetch from model leaderboard view
-        st.dataframe({"status": ["Connect to API"]})
-
-
-if __name__ == "__main__":
-    main()
+with t4:
+    game_id = st.text_input("Game id (e.g. 2024_01_BAL_KC)")
+    if game_id:
+        g = q(f"""select f.*, p.model_prob_home from marts.fct_games f
+                  left join marts.predictions p using (game_id)
+                  where f.game_id = '{game_id.replace("'", "")}'""")
+        st.dataframe(g.T if not g.empty else g, use_container_width=True)

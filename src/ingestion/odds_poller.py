@@ -35,6 +35,7 @@ SPORT_KEYS = {
 @dataclass
 class OddsSnapshot:
     """A single odds reading from one sportsbook for one market."""
+
     captured_at: datetime
     game_id: str
     sportsbook: str
@@ -125,6 +126,8 @@ def parse_odds_response(
                     book_name=book_name,
                     market_key=market_key,
                     outcomes=outcomes,
+                    home_team=game.get("home_team", ""),
+                    away_team=game.get("away_team", ""),
                 )
                 if snapshot:
                     snapshots.append(snapshot)
@@ -138,25 +141,25 @@ def _build_snapshot(
     book_name: str,
     market_key: str,
     outcomes: list[dict],
+    home_team: str = "",
+    away_team: str = "",
 ) -> OddsSnapshot | None:
-    """Build a single OddsSnapshot from market outcomes."""
+    """Build a single OddsSnapshot from market outcomes.
+
+    The Odds API labels moneyline and spread outcomes by TEAM NAME, in no
+    guaranteed order, so sides are matched by name against the event's
+    home_team / away_team. (v1 assumed the first outcome was the home team.)
+    """
     if not outcomes:
         return None
+    by_name = {o.get("name"): o for o in outcomes}
 
     if market_key == "h2h":
-        home_odds = away_odds = draw_odds = None
-        for o in outcomes:
-            name = o.get("name", "")
-            price = o.get("price")
-            # The Odds API labels outcomes by team name, not home/away
-            # In production, you'd map team names to home/away from the game object
-            if len(outcomes) >= 2:
-                if o == outcomes[0]:
-                    home_odds = price
-                elif o == outcomes[1]:
-                    away_odds = price
-                elif o.get("name") == "Draw":
-                    draw_odds = price
+        home_odds = by_name.get(home_team, {}).get("price")
+        away_odds = by_name.get(away_team, {}).get("price")
+        draw_odds = by_name.get("Draw", {}).get("price")
+        if home_odds is None or away_odds is None:
+            return None  # names didn't match: skip rather than guess
 
         return OddsSnapshot(
             captured_at=captured_at,
@@ -173,15 +176,11 @@ def _build_snapshot(
         )
 
     elif market_key == "spreads":
-        home_spread = home_odds = away_odds = None
-        for o in outcomes:
-            point = o.get("point")
-            price = o.get("price")
-            if o == outcomes[0]:
-                home_spread = point
-                home_odds = price
-            else:
-                away_odds = price
+        home = by_name.get(home_team)
+        away = by_name.get(away_team)
+        if home is None or away is None:
+            return None
+        home_spread, home_odds, away_odds = home.get("point"), home.get("price"), away.get("price")
 
         return OddsSnapshot(
             captured_at=captured_at,

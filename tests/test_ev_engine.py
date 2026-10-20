@@ -1,7 +1,5 @@
 """Tests for the +EV Discrepancy Engine."""
 
-import pytest
-
 from src.engines.ev_engine import (
     american_to_decimal,
     calculate_edge_confidence,
@@ -125,3 +123,24 @@ class TestScanForEV:
         opps = scan_for_ev(model, odds, min_ev=0.01)
         if len(opps) >= 2:
             assert opps[0].ev_pct >= opps[1].ev_pct
+
+
+def test_scan_reports_vig_free_market_probability():
+    from src.engines.ev_engine import VigRemovalMethod
+
+    model = {"home_ml": 0.60, "away_ml": 0.40}
+    odds = {"Book": {"home_ml": -110, "away_ml": -110}}
+    [opp] = scan_for_ev(model, odds, vig_method=VigRemovalMethod.ADDITIVE, min_ev=0.01)
+    assert opp.selection == "home_ml"
+    assert abs(opp.market_implied - 0.5) < 1e-9  # 52.4% with vig -> 50% fair
+
+
+def test_vig_method_changes_fair_probability_on_lopsided_markets():
+    from src.engines.ev_engine import VigRemovalMethod
+
+    model = {"fav_ml": 0.85, "dog_ml": 0.15}
+    odds = {"Book": {"fav_ml": -400, "dog_ml": 300}}
+    add = scan_for_ev(model, odds, VigRemovalMethod.ADDITIVE, min_ev=-1)
+    shin = scan_for_ev(model, odds, VigRemovalMethod.SHIN, min_ev=-1)
+    fav = lambda opps: next(o.market_implied for o in opps if o.selection == "fav_ml")  # noqa: E731
+    assert fav(add) != fav(shin)

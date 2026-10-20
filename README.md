@@ -1,237 +1,102 @@
-# EdgeIQ -- Quantitative Sports Betting Analytics Engine
+# EdgeIQ: an NFL model vs the betting market
 
-> Self-directed quantitative analytics project. All data is synthetic/simulated.
-> Designed to demonstrate enterprise-grade sports analytics architecture and domain expertise.
+A self-directed data engineering and analytics project. It ingests **every NFL game since 1999 with real closing betting lines** ([nflverse](https://github.com/nflverse/nfldata)), builds a tested Parquet + DuckDB warehouse, rates teams with point-in-time **Elo**, trains a **walk-forward** win-probability model, scores it against the market, and **backtests** betting its edges with Kelly sizing and bootstrap confidence intervals.
 
-## What It Does
+The question it answers honestly: *can a public-data model beat the closing line?* (On 20 years of real games: no. The numbers are below, and the result is as useful as a win would be.)
 
-Identifies mathematically profitable betting opportunities by combining statistical prediction models, real-time cross-book odds comparison, NLP-powered injury analysis, and Kelly-optimal bet sizing -- then proves the edge was real by tracking closing line value.
+## Results (real data, 2006–2026, walk-forward)
 
-## The Problem This Solves
+From [`reports/report.md`](reports/report.md), regenerated weekly by CI:
 
-| Who | Pain Point | Cost |
-|---|---|---|
-| **Sportsbook operators** | Stale lines exploited by sharps before injury news is priced in | $2-5B/yr industry-wide in mispriced liability |
-| **Quantitative betting firms** | No systematic way to prove model edge vs luck (CLV tracking) | Misallocated bankroll, blown funds |
-| **Analytics platforms** | Manual injury parsing is slow -- lines move in seconds, reports take minutes | Subscribers get stale picks, churn |
-| **Risk managers** | Correlated parlay exposure is priced independently across markets | Unhedged tail risk on correlated outcomes |
+| | Games | Log loss ↓ | Brier ↓ | Accuracy |
+|---|---:|---:|---:|---:|
+| **Market** (no-vig closing line) | 5,372 | **0.610** | **0.212** | **66.3%** |
+| Model (logistic regression on Elo + context) | 5,372 | 0.630 | 0.220 | 64.0% |
+| Elo alone | 5,372 | 0.630 | – | – |
 
-## Core Modules
+| Backtest at closing odds | Bets | Flat-stake ROI | 95% CI | Quarter-Kelly bankroll |
+|---|---:|---:|---|---|
+| Bet the model's edges (≥3 pts) | 3,849 | −3.05% | −7.4% to +1.1% | $10,000 → $18 |
+| Bet every home team | 5,373 | −4.30% | −7.1% to −1.6% | – |
 
-### 1. +EV Discrepancy Engine (`src/engines/ev_engine.py`)
-Compares model-generated probabilities against real-time sportsbook odds to surface positive expected value opportunities. Calculates true EV after vig removal, not just line shopping.
-
-### 2. Statistical Prediction Models (`src/models/`)
-- **Game predictor**: Poisson-based score prediction + XGBoost classifier for moneyline/spread/total
-- **Player projector**: Usage-rate adjusted projections for props markets
-- **Feature engineering**: 140+ features including rest days, travel distance, pace factors, referee tendencies
-
-### 3. LLM Injury & Narrative Parser (`src/intelligence/narrative_parser.py`)
-Claude API integration that:
-- Parses injury reports, press conferences, and beat reporter tweets
-- Quantifies impact on win probability and player props
-- Detects "questionable" vs "doubtful" vs "out" sentiment faster than manual reading
-- Outputs structured JSON with confidence scores
-
-### 4. Contextual Split & Usage Model (`src/intelligence/contextual_splits.py`)
-SQL-driven situational analysis:
-- Home/away, rest days, back-to-back, divisional, indoor/outdoor
-- Pace-adjusted stats (per-100-possessions for NBA, per-60 for NHL)
-- Referee/umpire tendencies by call type
-- Weather impact models for outdoor sports
-
-### 5. Correlated Parlay Builder (`src/engines/parlay_builder.py`)
-Identifies legs that are positively correlated but priced independently:
-- Game total OVER + player points OVER (pace correlation)
-- Underdog ML + UNDER (game script correlation)
-- Calculates true parlay probability vs book-offered odds
-- Flags exploitable correlation gaps
-
-### 6. Kelly Criterion Bet Sizer (`src/engines/bet_sizer.py`)
-Optimal bankroll allocation:
-- Full Kelly, fractional Kelly (1/4, 1/2), and fixed-unit modes
-- Simultaneous Kelly for multiple concurrent bets
-- Drawdown-adjusted sizing based on current bankroll vs peak
-- Risk-of-ruin calculations at configurable confidence levels
-
-### 7. Closing Line Value Tracker (`src/engines/clv_tracker.py`)
-The only metric that proves long-term edge:
-- Captures odds at bet placement vs market close
-- Calculates CLV in both implied-probability and cents
-- Rolling 30/90/365-day CLV with statistical significance tests
-- Separates CLV by sport, bet type, and sportsbook
+What this shows:
+- The closing line is **well calibrated**: games it prices around 75% are won 76% of the time; around 45%, 44%.
+- The model beat the market's log loss in only 3 of 21 seasons (2006, 2015 and the partial 2026 season).
+- The backtest's confidence interval includes zero: **no evidence of an edge**.
+- Kelly sizing on an overconfident model is ruinous. Calibration has to come before sizing.
 
 ## Architecture
 
-```
-                    +------------------+
-                    |   Streamlit UI   |
-                    +--------+---------+
-                             |
-                    +--------v---------+
-                    |    FastAPI        |
-                    |  (REST + WebSocket)|
-                    +--------+---------+
-                             |
-          +------------------+------------------+
-          |                  |                  |
-+---------v------+  +--------v-------+  +-------v--------+
-|  EV Engine     |  | Prediction     |  | Intelligence   |
-|  Bet Sizer     |  | Models         |  | (Claude API)   |
-|  Parlay Builder|  | (XGBoost)      |  | Narrative NLP  |
-|  CLV Tracker   |  |                |  | Context Splits |
-+--------+-------+  +--------+-------+  +-------+--------+
-         |                   |                   |
-         +-------------------+-------------------+
-                             |
-                    +--------v---------+
-                    |   PostgreSQL     |
-                    |  + TimescaleDB   |
-                    +--------+---------+
-                             |
-                    +--------v---------+
-                    |     Redis        |
-                    | (cache + pubsub) |
-                    +------------------+
-
-Background: Celery workers poll odds APIs every 30s,
-            run model inference on schedule,
-            publish alerts via Redis pub/sub
+```mermaid
+flowchart LR
+  NV[nflverse games.csv<br/>scores + closing lines] --> ING[ingest<br/>land raw + SHA-256]
+  ING --> BR[(bronze Parquet<br/>partitioned by season)]
+  BR --> QC{quality gate<br/>8 checks}
+  QC --> T[transform runner<br/>sql/models.toml]
+  T --> STG[(staging<br/>stg_games, stg_team_games)]
+  STG --> ELO[[Python model<br/>Elo ratings]]
+  ELO --> F[(marts.fct_games)]
+  F --> WM[[Python model<br/>walk-forward logistic regression]]
+  WM --> MVM[(model_vs_market)]
+  F & WM --> BT[backtest<br/>Kelly + bootstrap]
+  BT --> R[reports/report.md]
+  MVM & BT --> API[FastAPI] & DASH[Streamlit]
 ```
 
-## Tech Stack
+- **Lake:** `data/landing/` (raw files exactly as received) → `data/lake/bronze/games/season=YYYY/` (typed Parquet; each season partition is replaced on re-run, so loads are idempotent) → `_manifest.jsonl` (lineage: source, SHA-256, rows, seasons).
+- **Warehouse:** DuckDB reading the lake. Models are declared in [`sql/models.toml`](sql/models.toml) and run by [`src/pipeline/transform.py`](src/pipeline/transform.py), a ~150-line runner that does what dbt does: `ref()` resolution with ordering checks, view/table materialization, SQL **and** Python models in one graph, and tests after every model that stop the build.
+- **No look-ahead anywhere:** Elo rows hold the ratings *going into* each game; the model for season S is trained only on seasons before S (a test enforces it).
 
-| Layer | Technology | Why |
-|---|---|---|
-| Language | Python 3.11+ | Unified stack -- statsmodels/scipy replace R, native Claude SDK |
-| Database | PostgreSQL 15 + TimescaleDB | Time-series odds snapshots, JSONB for flexible schemas |
-| Cache | Redis 7 | Sub-ms odds lookups, pub/sub for real-time alerts |
-| API | FastAPI | Async, auto-docs, WebSocket support for live feeds |
-| ML | XGBoost + scikit-learn | Gradient boosting for game prediction, logistic for props |
-| NLP | Claude API (Anthropic) | Injury report parsing, narrative sentiment extraction |
-| Dashboard | Streamlit | Free, Python-native, no licensing (upgradeable to Plotly Dash) |
-| Jobs | Celery + Redis | Scheduled odds polling, model retraining, alert dispatch |
-| Deploy | Docker + docker-compose | Single-command local setup, production-ready |
+Details: [ARCHITECTURE.md](ARCHITECTURE.md) · [docs/DATA_DICTIONARY.md](docs/DATA_DICTIONARY.md)
 
-## Database Schema
-
-Six migration files in `schema/` covering 20 tables:
-
-| File | Tables | Purpose |
-|---|---|---|
-| `001_core.sql` | leagues, teams, players, games | Reference data |
-| `002_odds.sql` | sportsbooks, odds_snapshots, player_prop_snapshots | Time-series odds with TimescaleDB hypertables |
-| `003_models.sql` | model_predictions, player_projections, feature_sets | ML model outputs |
-| `004_bets.sql` | bets, bet_legs, bet_results, bankroll_ledger | Bet tracking and P&L |
-| `005_intelligence.sql` | injury_reports, parsed_narratives, contextual_splits, news_signals | NLP and situational data |
-| `006_analytics.sql` | clv_records, model_performance, ev_opportunities, correlation_pairs | Analytics and tracking |
-
-## Quick Start
+## Quick start
 
 ```bash
-# Clone and configure
-git clone https://github.com/JonJonz7/sports-betting-analytics.git
-cd sports-betting-analytics
-cp .env.example .env  # Add your API keys
-
-# Start infrastructure
-docker-compose up -d  # PostgreSQL + Redis
-
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run migrations
-psql $DATABASE_URL -f schema/001_core.sql
-psql $DATABASE_URL -f schema/002_odds.sql
-# ... etc
-
-# Start the API
-uvicorn src.api.main:app --reload
-
-# Start the dashboard
-streamlit run src/dashboard/app.py
-
-# Run tests
-pytest tests/ -v
+make setup      # Python 3.11 venv + pinned dependencies
+make demo       # whole pipeline on the synthetic sample (no network)
+make run        # whole pipeline on real NFL data (downloads ~2 MB)
+make test       # 81 tests incl. an end-to-end run
+make dashboard  # http://localhost:8501
+make api        # http://localhost:8000/docs
 ```
 
-## Project Structure
+Each step can also run alone: `python -m src.cli ingest|check|build|backtest|report --source nflverse|sample`.
+
+## How this was built
+
+[docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md) is the step-by-step process from an empty folder: what to build in each phase, the commands, why, and how to check it's done. [docs/LESSONS.md](docs/LESSONS.md) lists the bugs that real data and the linter exposed, and how each was fixed.
+
+## Quality
+
+- **Bronze gate** (`src/pipeline/checks.py`): 8 checks; every one has a test that makes it fail on purpose.
+- **Model tests** (`sql/models.toml`): uniqueness, ranges, no rows lost in joins, point-in-time training, and quarantine of impossible prices. Real data had one: a game whose two moneylines implied 98% total probability.
+- **81 pytest tests**: ingestion, checks, Elo, walk-forward, runner, backtest math, API, odds parsing, plus the original engine tests.
+- **CI:** lint + tests + demo on every push; a weekly job runs the full pipeline on fresh real data and publishes the report.
+
+## Repository map
 
 ```
-sports-betting-analytics/
-|-- README.md
-|-- ARCHITECTURE.md              # Detailed system design
-|-- BUILD_INSTRUCTIONS.md        # Step-by-step build guide with Claude prompts
-|-- pyproject.toml
-|-- docker-compose.yml
-|-- .env.example
-|-- .gitignore
-|-- schema/
-|   |-- 001_core.sql
-|   |-- 002_odds.sql
-|   |-- 003_models.sql
-|   |-- 004_bets.sql
-|   |-- 005_intelligence.sql
-|   +-- 006_analytics.sql
-|-- src/
-|   |-- __init__.py
-|   |-- config.py
-|   |-- ingestion/
-|   |   |-- odds_poller.py       # Real-time odds collection
-|   |   +-- injury_scraper.py    # Injury feed ingestion
-|   |-- models/
-|   |   |-- game_predictor.py    # Poisson + XGBoost game models
-|   |   |-- player_projector.py  # Usage-rate player props
-|   |   +-- feature_engineering.py
-|   |-- engines/
-|   |   |-- ev_engine.py         # +EV identification
-|   |   |-- bet_sizer.py         # Kelly criterion sizing
-|   |   |-- parlay_builder.py    # Correlated parlay detection
-|   |   +-- clv_tracker.py       # Closing line value
-|   |-- intelligence/
-|   |   |-- narrative_parser.py  # Claude API injury NLP
-|   |   +-- contextual_splits.py # Situational SQL analytics
-|   |-- api/
-|   |   |-- main.py
-|   |   +-- routes/
-|   |       |-- predictions.py
-|   |       |-- opportunities.py
-|   |       +-- analytics.py
-|   +-- dashboard/
-|       +-- app.py               # Streamlit dashboard
-|-- tests/
-|   |-- test_ev_engine.py
-|   |-- test_bet_sizer.py
-|   +-- test_clv_tracker.py
-+-- scripts/
-    |-- seed_data.py             # Generate synthetic data
-    +-- backtest.py              # Historical backtesting
+src/pipeline/     ingest (land + bronze), quality checks, transform runner
+sql/              models.toml + staging/ and marts/ SQL
+src/models/       elo.py, win_model.py (pipeline); game_predictor, player_projector, feature_engineering (library)
+src/backtest/     strategy simulation, drawdown, bootstrap CI
+src/engines/      EV + vig removal, Kelly sizing, CLV, correlated parlays (pure functions, tested)
+src/api/          FastAPI: games, scores, backtest, and betting calculators
+src/dashboard/    Streamlit app
+src/ingestion/    live odds poller for The Odds API (library; paid key, not used by the pipeline)
+src/intelligence/ injury-report parser (Claude API, optional) and contextual splits (library)
+schema/           Postgres/TimescaleDB schema for the live system (design, not used by the pipeline)
+data/sample/      synthetic games in nflverse's columns (tests, CI, `make demo`)
+docs/             build guide, lessons, data dictionary, roadmap
 ```
 
-## Key Formulas
+## Limitations
 
-**Expected Value:**
-```
-EV = (model_prob x (decimal_odds - 1)) - (1 - model_prob)
-```
+- **Closing lines only.** nflverse has no opening odds, so closing line value (the standard proof of an edge) can't be measured here; the backtest bets at the close. The CLV engine is built and tested for when earlier prices are available.
+- **Moneylines only** in the backtest (spreads and totals are in the data but not yet modeled).
+- **Library modules not yet wired into the pipeline:** the live odds poller (paid API), the injury parser (paid LLM API), the player-prop projector and the parlay builder. They're tested as pure functions; [docs/ROADMAP.md](docs/ROADMAP.md) has the plan.
+- The synthetic sample uses **fictional teams**; real runs use real games. Data © nflverse contributors, downloaded at run time and not redistributed here.
 
-**Kelly Criterion (optimal bet size):**
-```
-f* = (b*p - q) / b
-where b = decimal_odds - 1, p = win_probability, q = 1 - p
-```
+## Stack
 
-**Closing Line Value:**
-```
-CLV = (closing_implied_prob - bet_implied_prob) / closing_implied_prob x 100
-```
-
-**Poisson Game Total:**
-```
-P(X = k) = (lambda^k * e^-lambda) / k!
-where lambda = team's adjusted scoring rate
-```
-
-## License
-
-MIT
+Python 3.11 · pandas · PyArrow/Parquet · DuckDB · scikit-learn · FastAPI · Streamlit + Plotly · pytest · ruff · GitHub Actions

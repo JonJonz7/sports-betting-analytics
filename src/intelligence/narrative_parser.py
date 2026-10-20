@@ -21,15 +21,16 @@ logger = logging.getLogger(__name__)
 @dataclass
 class NarrativeImpact:
     """Structured output from Claude's analysis of an injury/news report."""
+
     player_name: str
     team: str
-    injury_type: str                    # 'ankle', 'hamstring', 'illness', etc.
-    official_status: str                # 'questionable', 'doubtful', 'out', 'probable'
-    llm_sentiment: str                  # 'likely_playing', 'likely_limited', 'likely_out', 'uncertain'
-    confidence: float                   # 0-1, model's self-assessed confidence
-    impact_score: float                 # 0-1, estimated impact on team outcome
-    win_prob_shift: float               # e.g., -0.08 = team loses 8% win probability
-    total_shift: float                  # e.g., -3.5 = game total drops 3.5 points
+    injury_type: str  # 'ankle', 'hamstring', 'illness', etc.
+    official_status: str  # 'questionable', 'doubtful', 'out', 'probable'
+    llm_sentiment: str  # 'likely_playing', 'likely_limited', 'likely_out', 'uncertain'
+    confidence: float  # 0-1, model's self-assessed confidence
+    impact_score: float  # 0-1, estimated impact on team outcome
+    win_prob_shift: float  # e.g., -0.08 = team loses 8% win probability
+    total_shift: float  # e.g., -3.5 = game total drops 3.5 points
     affected_markets: list[str] = field(default_factory=list)
     reasoning: str = ""
     source_reliability: str = "unknown"  # 'official', 'beat_reporter', 'social_media'
@@ -170,28 +171,28 @@ def estimate_impact_fallback(
     # Historical impact averages (from NBA 2019-2024 data)
     impact_matrix = {
         "star": {
-            "out":          {"impact": 0.85, "win_shift": -0.10, "total_shift": -4.5},
-            "doubtful":     {"impact": 0.70, "win_shift": -0.07, "total_shift": -3.0},
+            "out": {"impact": 0.85, "win_shift": -0.10, "total_shift": -4.5},
+            "doubtful": {"impact": 0.70, "win_shift": -0.07, "total_shift": -3.0},
             "questionable": {"impact": 0.45, "win_shift": -0.04, "total_shift": -2.0},
-            "probable":     {"impact": 0.10, "win_shift": -0.01, "total_shift": -0.5},
+            "probable": {"impact": 0.10, "win_shift": -0.01, "total_shift": -0.5},
         },
         "starter": {
-            "out":          {"impact": 0.45, "win_shift": -0.04, "total_shift": -2.0},
-            "doubtful":     {"impact": 0.35, "win_shift": -0.03, "total_shift": -1.5},
+            "out": {"impact": 0.45, "win_shift": -0.04, "total_shift": -2.0},
+            "doubtful": {"impact": 0.35, "win_shift": -0.03, "total_shift": -1.5},
             "questionable": {"impact": 0.20, "win_shift": -0.02, "total_shift": -1.0},
-            "probable":     {"impact": 0.05, "win_shift": -0.005, "total_shift": -0.2},
+            "probable": {"impact": 0.05, "win_shift": -0.005, "total_shift": -0.2},
         },
         "rotation": {
-            "out":          {"impact": 0.15, "win_shift": -0.01, "total_shift": -0.5},
-            "doubtful":     {"impact": 0.10, "win_shift": -0.008, "total_shift": -0.3},
+            "out": {"impact": 0.15, "win_shift": -0.01, "total_shift": -0.5},
+            "doubtful": {"impact": 0.10, "win_shift": -0.008, "total_shift": -0.3},
             "questionable": {"impact": 0.05, "win_shift": -0.004, "total_shift": -0.2},
-            "probable":     {"impact": 0.02, "win_shift": -0.001, "total_shift": -0.1},
+            "probable": {"impact": 0.02, "win_shift": -0.001, "total_shift": -0.1},
         },
         "bench": {
-            "out":          {"impact": 0.05, "win_shift": -0.003, "total_shift": -0.2},
-            "doubtful":     {"impact": 0.03, "win_shift": -0.002, "total_shift": -0.1},
+            "out": {"impact": 0.05, "win_shift": -0.003, "total_shift": -0.2},
+            "doubtful": {"impact": 0.03, "win_shift": -0.002, "total_shift": -0.1},
             "questionable": {"impact": 0.02, "win_shift": -0.001, "total_shift": -0.05},
-            "probable":     {"impact": 0.01, "win_shift": 0.0, "total_shift": 0.0},
+            "probable": {"impact": 0.01, "win_shift": 0.0, "total_shift": 0.0},
         },
     }
 
@@ -232,7 +233,7 @@ def _extract_json(text: str) -> dict:
                     depth -= 1
                     if depth == 0:
                         try:
-                            return json.loads(text[i:j + 1])
+                            return json.loads(text[i : j + 1])
                         except json.JSONDecodeError:
                             break
             break

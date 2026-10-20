@@ -11,20 +11,20 @@ which either over-bets (risk of ruin) or under-bets (leaves money on the table).
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 
 @dataclass
 class BetSize:
     """Recommended bet sizing for an opportunity."""
-    kelly_full: float           # full Kelly fraction of bankroll
-    kelly_half: float           # half Kelly (moderate risk)
-    kelly_quarter: float        # quarter Kelly (conservative)
-    recommended_fraction: float # the fraction we'd actually recommend
-    recommended_amount: float   # dollar amount based on current bankroll
-    risk_of_ruin: float         # probability of going bust at this size
-    edge_pct: float             # the EV edge this sizing is based on
+
+    kelly_full: float  # full Kelly fraction of bankroll
+    kelly_half: float  # half Kelly (moderate risk)
+    kelly_quarter: float  # quarter Kelly (conservative)
+    recommended_fraction: float  # the fraction we'd actually recommend
+    recommended_amount: float  # dollar amount based on current bankroll
+    risk_of_ruin: float  # probability of going bust at this size
+    edge_pct: float  # the EV edge this sizing is based on
 
 
 def kelly_fraction(probability: float, decimal_odds: float) -> float:
@@ -219,6 +219,6 @@ def drawdown_adjusted_size(
         return base_fraction
 
     ratio = current_bankroll / peak_bankroll
-    adjustment = ratio ** drawdown_scale
+    adjustment = ratio**drawdown_scale
 
     return base_fraction * adjustment

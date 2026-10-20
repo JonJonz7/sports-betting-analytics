@@ -20,6 +20,7 @@ import numpy as np
 @dataclass
 class GamePrediction:
     """Full prediction output for a single game."""
+
     game_id: str
     home_team: str
     away_team: str
@@ -27,16 +28,16 @@ class GamePrediction:
     # Moneyline probabilities (sum to 1)
     home_win_prob: float
     away_win_prob: float
-    draw_prob: float            # 0 for most US sports
+    draw_prob: float  # 0 for most US sports
 
     # Score predictions
     home_score_pred: float
     away_score_pred: float
     total_pred: float
-    spread_pred: float          # negative = home favored
+    spread_pred: float  # negative = home favored
 
     # Confidence
-    model_confidence: float     # 0-1
+    model_confidence: float  # 0-1
 
 
 def poisson_probability(lam: float, k: int) -> float:
@@ -53,7 +54,7 @@ def poisson_probability(lam: float, k: int) -> float:
     """
     if lam <= 0 or k < 0:
         return 0.0
-    return (lam ** k) * math.exp(-lam) / math.factorial(k)
+    return (lam**k) * math.exp(-lam) / math.factorial(k)
 
 
 def poisson_score_matrix(
@@ -174,7 +175,7 @@ def calculate_team_lambda(
     lam += home_advantage
     lam += rest_adjustment
     lam *= pace_factor
-    lam *= (1 + injury_impact)  # injury_impact is negative for missing players
+    lam *= 1 + injury_impact  # injury_impact is negative for missing players
 
     return max(0.0, lam)
 
@@ -182,46 +183,68 @@ def calculate_team_lambda(
 # Feature list for XGBoost model (140+ features)
 FEATURE_COLUMNS = [
     # Team strength
-    "home_off_rating", "home_def_rating", "away_off_rating", "away_def_rating",
-    "home_net_rating", "away_net_rating", "home_win_pct", "away_win_pct",
-
+    "home_off_rating",
+    "home_def_rating",
+    "away_off_rating",
+    "away_def_rating",
+    "home_net_rating",
+    "away_net_rating",
+    "home_win_pct",
+    "away_win_pct",
     # Recent form (last 5, 10 games)
-    "home_win_pct_l5", "away_win_pct_l5", "home_win_pct_l10", "away_win_pct_l10",
-    "home_avg_margin_l5", "away_avg_margin_l5",
-
+    "home_win_pct_l5",
+    "away_win_pct_l5",
+    "home_win_pct_l10",
+    "away_win_pct_l10",
+    "home_avg_margin_l5",
+    "away_avg_margin_l5",
     # Rest and travel
-    "home_rest_days", "away_rest_days", "home_b2b", "away_b2b",
+    "home_rest_days",
+    "away_rest_days",
+    "home_b2b",
+    "away_b2b",
     "travel_distance_miles",
-
     # Pace and style
-    "home_pace", "away_pace", "pace_matchup_delta",
-    "home_3pt_rate", "away_3pt_rate", "home_ft_rate", "away_ft_rate",
-
+    "home_pace",
+    "away_pace",
+    "pace_matchup_delta",
+    "home_3pt_rate",
+    "away_3pt_rate",
+    "home_ft_rate",
+    "away_ft_rate",
     # Opponent-adjusted
-    "home_off_vs_opp_def", "away_off_vs_opp_def",
-    "home_sos", "away_sos",  # strength of schedule
-
+    "home_off_vs_opp_def",
+    "away_off_vs_opp_def",
+    "home_sos",
+    "away_sos",  # strength of schedule
     # Injury impact
-    "home_injury_impact", "away_injury_impact",
-
+    "home_injury_impact",
+    "away_injury_impact",
     # Line movement
-    "opening_spread", "current_spread", "spread_movement",
-    "opening_total", "current_total", "total_movement",
+    "opening_spread",
+    "current_spread",
+    "spread_movement",
+    "opening_total",
+    "current_total",
+    "total_movement",
     "line_movement_velocity",
-
     # Public betting
-    "public_home_pct", "public_away_pct",
-
+    "public_home_pct",
+    "public_away_pct",
     # Situational
-    "is_divisional", "is_conference", "is_rivalry",
+    "is_divisional",
+    "is_conference",
+    "is_rivalry",
     "home_altitude_advantage",
-
     # Referee/umpire
-    "referee_over_tendency", "referee_foul_rate",
-
+    "referee_over_tendency",
+    "referee_foul_rate",
     # Weather (outdoor sports)
-    "wind_speed", "temperature", "precipitation_prob",
-
+    "wind_speed",
+    "temperature",
+    "precipitation_prob",
     # Historical matchup
-    "h2h_home_win_pct", "h2h_avg_total", "h2h_sample_size",
+    "h2h_home_win_pct",
+    "h2h_avg_total",
+    "h2h_sample_size",
 ]

@@ -18,12 +18,13 @@ from dataclasses import dataclass
 @dataclass
 class PlayerProjection:
     """Projected stats for a player in a specific game."""
+
     player_id: str
     player_name: str
     game_id: str
     projected_minutes: float
-    projections: dict[str, float]   # stat_name -> projected value
-    confidence: float               # 0-1
+    projections: dict[str, float]  # stat_name -> projected value
+    confidence: float  # 0-1
 
 
 def project_player_stats(

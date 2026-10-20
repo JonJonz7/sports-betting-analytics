@@ -1,0 +1,68 @@
+# Model graph, run top to bottom by src/pipeline/transform.py.
+# kind = "sql"    : file under sql/, materialised as view or table
+# kind = "python" : "module:function(con) -> DataFrame", materialised as a table
+# tests run right after each model; any failure stops the build.
+
+[[model]]
+name = "staging.stg_games"
+kind = "sql"
+path = "staging/stg_games.sql"
+materialized = "table"
+tests = [
+  { type = "unique", column = "game_id" },
+  { type = "not_null", column = "game_date" },
+  { type = "expression", sql = "home_team <> away_team", description = "a team never plays itself" },
+  { type = "expression", sql = "not is_played or (home_score >= 0 and away_score >= 0)" },
+  { type = "expression", sql = "market_flag <> 'ok' or overround between 1.0 and 1.15", description = "usable prices have a 0-15% bookmaker margin" },
+  { type = "expression", sql = "market_flag = 'ok' or home_novig is null", description = "quarantined prices never reach the model or backtest" },
+  { type = "max_share", sql = "market_flag in ('below_100pct', 'margin_over_15pct')", max = 0.01, description = "under 1% of games have impossible prices" },
+  { type = "expression", sql = "home_novig is null or abs(home_novig + away_novig - 1) < 1e-9" },
+]
+
+[[model]]
+name = "staging.stg_team_games"
+kind = "sql"
+path = "staging/stg_team_games.sql"
+materialized = "table"
+tests = [
+  { type = "unique", columns = ["game_id", "team"] },
+  { type = "expression", sql = "is_home in (true, false)" },
+]
+
+[[model]]
+name = "features.elo_ratings"
+kind = "python"
+callable = "src.models.elo:build_elo_ratings"
+tests = [
+  { type = "unique", column = "game_id" },
+  { type = "expression", sql = "elo_prob_home between 0 and 1" },
+]
+
+[[model]]
+name = "marts.fct_games"
+kind = "sql"
+path = "marts/fct_games.sql"
+materialized = "table"
+tests = [
+  { type = "unique", column = "game_id" },
+  { type = "row_count_equals", ref = "staging.stg_games", description = "no games lost or duplicated by joins" },
+]
+
+[[model]]
+name = "marts.predictions"
+kind = "python"
+callable = "src.models.win_model:build_predictions"
+tests = [
+  { type = "unique", column = "game_id" },
+  { type = "expression", sql = "model_prob_home between 0.01 and 0.99" },
+  { type = "expression", sql = "max_train_season < season", description = "point-in-time: never trained on the season it predicts" },
+]
+
+[[model]]
+name = "marts.model_vs_market"
+kind = "sql"
+path = "marts/model_vs_market.sql"
+materialized = "table"
+tests = [
+  { type = "not_null", column = "market_log_loss" },
+]
